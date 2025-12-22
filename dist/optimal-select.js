@@ -17,11 +17,11 @@ var OptimalSelect = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // build-wrapper.mjs
-  var build_wrapper_exports = {};
-  __export(build_wrapper_exports, {
+  // src/index.mjs
+  var src_exports = {};
+  __export(src_exports, {
     common: () => common_exports,
-    default: () => build_wrapper_default,
+    default: () => src_default,
     getMultiSelector: () => getMultiSelector,
     getSingleSelector: () => getSingleSelector,
     optimize: () => optimize,
@@ -143,13 +143,11 @@ var OptimalSelect = (() => {
       var validate = null;
       var instruction = null;
       switch (true) {
-        // child: '>'
         case />/.test(type):
           instruction = function checkParent(node) {
             return (validate2) => validate2(node.parent) && node.parent;
           };
           break;
-        // class: '.'
         case /^\./.test(type):
           const names = type.substr(1).split(".");
           validate = (node) => {
@@ -163,7 +161,6 @@ var OptimalSelect = (() => {
             return typeof node === "function" ? node(validate) : getAncestor(node, root, validate);
           };
           break;
-        // attribute: '[key="value"]'
         case /^\[/.test(type):
           const [attributeKey, attributeValue] = type.replace(/\[|\]|"/g, "").split("=");
           validate = (node) => {
@@ -188,7 +185,6 @@ var OptimalSelect = (() => {
             return typeof node === "function" ? node(validate) : getAncestor(node, root, validate);
           };
           break;
-        // id: '#'
         case /^#/.test(type):
           const id = type.substr(1);
           validate = (node) => {
@@ -208,7 +204,6 @@ var OptimalSelect = (() => {
             return typeof node === "function" ? node(validate) : getAncestor(node, root, validate);
           };
           break;
-        // universal: '*'
         case /\*/.test(type):
           validate = (node) => true;
           instruction = function checkUniversal(node, root) {
@@ -220,7 +215,6 @@ var OptimalSelect = (() => {
             return typeof node === "function" ? node(validate) : getAncestor(node, root, validate);
           };
           break;
-        // tag: '...'
         default:
           validate = (node) => {
             return node.name === type;
@@ -341,7 +335,8 @@ var OptimalSelect = (() => {
         ignoreClass = true;
       }
       var predicate = ignore[type];
-      if (typeof predicate === "function") return;
+      if (typeof predicate === "function")
+        return;
       if (typeof predicate === "number") {
         predicate = predicate.toString();
       }
@@ -361,8 +356,10 @@ var OptimalSelect = (() => {
     }
     while (element !== root) {
       if (skipChecks(element) !== true) {
-        if (checkAttributes(priority, element, ignore, path, root)) break;
-        if (checkTag(element, ignore, path, root)) break;
+        if (checkAttributes(priority, element, ignore, path, root))
+          break;
+        if (checkTag(element, ignore, path, root))
+          break;
         checkAttributes(priority, element, ignore, path);
         if (path.length === length) {
           checkTag(element, ignore, path);
@@ -517,8 +514,10 @@ var OptimalSelect = (() => {
     return path.join(" ").replace(/>/g, "> ").trim();
   }
   function optimizePart(prePart, current, postPart, elements) {
-    if (prePart.length) prePart = `${prePart} `;
-    if (postPart.length) postPart = ` ${postPart}`;
+    if (prePart.length)
+      prePart = `${prePart} `;
+    if (postPart.length)
+      postPart = ` ${postPart}`;
     if (/\[*\]/.test(current)) {
       const key = current.replace(/=.*$/, "]");
       var pattern = `${prePart}${key}${postPart}`;
@@ -659,7 +658,8 @@ var OptimalSelect = (() => {
     });
     const checkIgnore2 = (type, name, value) => {
       const predicate = normalizedIgnore[type];
-      if (!predicate) return false;
+      if (!predicate)
+        return false;
       return predicate(name, value);
     };
     const commonProperties = {
@@ -816,7 +816,7 @@ var OptimalSelect = (() => {
     return getSingleSelector(input, options);
   }
 
-  // build-wrapper.mjs
-  var build_wrapper_default = getQuerySelector;
-  return __toCommonJS(build_wrapper_exports);
+  // src/index.mjs
+  var src_default = getQuerySelector;
+  return __toCommonJS(src_exports);
 })();
