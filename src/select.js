@@ -69,7 +69,7 @@ export function getMultiSelector (elements, options = {}) {
   const ancestorSelector = getSingleSelector(ancestor, options)
 
   // TODO: consider usage of multiple selectors + parent-child relation + check for part redundancy
-  const commonSelectors = getCommonSelectors(elements)
+  const commonSelectors = getCommonSelectors(elements, options)
   const descendantSelector = commonSelectors[0]
 
   const selector = optimize(`${ancestorSelector} ${descendantSelector}`, elements, options)
@@ -94,11 +94,12 @@ export function getMultiSelector (elements, options = {}) {
  * Get selectors to describe a set of elements
  *
  * @param  {Array.<HTMLElements>} elements - [description]
+ * @param  {Object}               options  - [description]
  * @return {string}                        - [description]
  */
-function getCommonSelectors (elements) {
+function getCommonSelectors (elements, options = {}) {
 
-  const { classes, attributes, tag } = getCommonProperties(elements)
+  const { classes, attributes, tag } = getCommonProperties(elements, options)
 
   const selectorPath = []
 

@@ -4,6 +4,8 @@
  * Process collections for similarities.
  */
 
+import { escapeValue } from './utilities'
+
 /**
  * Find the last common ancestor of elements
  *
@@ -54,9 +56,41 @@ export function getCommonAncestor (elements, options = {}) {
  * Get a set of common properties of elements
  *
  * @param  {Array.<HTMLElement>} elements - [description]
+ * @param  {Object}              options  - [description]
  * @return {Object}                       - [description]
  */
-export function getCommonProperties (elements) {
+export function getCommonProperties (elements, options = {}) {
+
+  const {
+    ignore = {}
+  } = options
+
+  // Normalize ignore predicates (same logic as match.js)
+  const normalizedIgnore = {}
+  Object.keys(ignore).forEach((type) => {
+    var predicate = ignore[type]
+    if (typeof predicate === 'function') {
+      normalizedIgnore[type] = predicate
+      return
+    }
+    if (typeof predicate === 'number') {
+      predicate = predicate.toString()
+    }
+    if (typeof predicate === 'string') {
+      predicate = new RegExp(escapeValue(predicate).replace(/\\/g, '\\\\'))
+    }
+    if (typeof predicate === 'boolean') {
+      predicate = predicate ? /(?:)/ : /.^/
+    }
+    // check class-/attributename for regex
+    normalizedIgnore[type] = (name, value) => predicate.test(value)
+  })
+
+  const checkIgnore = (type, name, value) => {
+    const predicate = normalizedIgnore[type]
+    if (!predicate) return false
+    return predicate(name, value)
+  }
 
   const commonProperties = {
     classes: [],
@@ -76,8 +110,13 @@ export function getCommonProperties (elements) {
     if (commonClasses !== undefined) {
       var classes = element.getAttribute('class')
       if (classes) {
-        classes = classes.trim().split(' ')
-        if (!commonClasses.length) {
+        classes = classes.trim().split(' ').filter((className) => {
+          // Filter out ignored classes
+          return !checkIgnore('class', className, className)
+        })
+        if (!classes.length) {
+          delete commonProperties.classes
+        } else if (!commonClasses.length) {
           commonProperties.classes = classes
         } else {
           commonClasses = commonClasses.filter((entry) => classes.some((name) => name === entry))
@@ -99,10 +138,15 @@ export function getCommonProperties (elements) {
       const attributes = Object.keys(elementAttributes).reduce((attributes, key) => {
         const attribute = elementAttributes[key]
         const attributeName = attribute.name
+        const attributeValue = attribute.value
         // NOTE: workaround detection for non-standard phantomjs NamedNodeMap behaviour
         // (issue: https://github.com/ariya/phantomjs/issues/14634)
         if (attribute && attributeName !== 'class') {
-          attributes[attributeName] = attribute.value
+          // Filter out ignored attributes
+          if (!checkIgnore(attributeName, attributeName, attributeValue) &&
+              !checkIgnore('attribute', attributeName, attributeValue)) {
+            attributes[attributeName] = attributeValue
+          }
         }
         return attributes
       }, {})
@@ -135,7 +179,10 @@ export function getCommonProperties (elements) {
     // ~ tag
     if (commonTag !== undefined) {
       const tag = element.tagName.toLowerCase()
-      if (!commonTag) {
+      // Filter out ignored tags
+      if (checkIgnore('tag', null, tag)) {
+        delete commonProperties.tag
+      } else if (!commonTag) {
         commonProperties.tag = tag
       } else if (tag !== commonTag) {
         delete commonProperties.tag
