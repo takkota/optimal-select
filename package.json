@@ -41,6 +41,7 @@
     "url": "https://github.com/Autarc/optimal-select.git"
   },
   "scripts": {
+    "prepare": "npm run build",
     "prepublish": "npm run build",
     "check": "npm outdated -depth 0",
     "build": "NODE_ENV=production node build",
