@@ -7,7 +7,24 @@
     "url": "https://github.com/Autarc/optimal-select/issues"
   },
   "devDependencies": {
-    "esbuild": "^0.20.2"
+    "babel-loader": "^6.2.5",
+    "babel-plugin-add-module-exports": "^0.2.1",
+    "babel-preset-es2015": "^6.16.0",
+    "babel-preset-stage-0": "^6.16.0",
+    "babel-register": "^6.16.3",
+    "cheerio": "^0.22.0",
+    "deep-merge": "^1.0.0",
+    "fs-extra": "^1.0.0",
+    "gulp": "^3.9.1",
+    "gulp-babel": "^6.1.2",
+    "gulp-load-plugins": "^1.3.0",
+    "gulp-plumber": "^1.1.0",
+    "gulp-sourcemaps": "^1.6.0",
+    "gulp-util": "^3.0.7",
+    "gulp-watch": "^4.3.10",
+    "http-server": "^0.9.0",
+    "open-url": "^2.0.2",
+    "webpack": "^2.2.0-rc.2"
   },
   "homepage": "https://github.com/Autarc/optimal-select",
   "keywords": [
@@ -24,6 +41,9 @@
     "url": "https://github.com/Autarc/optimal-select.git"
   },
   "scripts": {
-    "build": "esbuild src/index.mjs --bundle --outfile=dist/optimal-select.js --format=iife --global-name=OptimalSelect && esbuild src/index.mjs --bundle --outfile=dist/optimal-select.min.js --format=iife --global-name=OptimalSelect --minify"
+    "check": "npm outdated -depth 0",
+    "build": "NODE_ENV=production node build",
+    "dev": "NODE_ENV=development node build",
+    "example": "open-url 'http:/localhost:8080/example' && http-server"
   }
 }
