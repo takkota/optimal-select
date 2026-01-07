@@ -76,11 +76,52 @@ export function getMultiSelector (elements, options = {}) {
   const selectorMatches = convertNodeList(document.querySelectorAll(selector))
 
   if (!elements.every((element) => selectorMatches.some((entry) => entry === element) )) {
-    // TODO: cluster matches to split into similar groups for sub selections
-    return console.warn(`
-      The selected elements can\'t be efficiently mapped.
-      Its probably best to use multiple single selectors instead!
-    `, elements)
+    // Cluster elements by selector pattern and try to generate combined selector
+    const clusters = clusterElementsBySelector(elements, options)
+
+    // If only one cluster, cannot improve - fall back to warning
+    if (clusters.size <= 1) {
+      if (globalModified) {
+        delete global.document
+      }
+      console.warn(`
+        The selected elements can\'t be efficiently mapped.
+        Its probably best to use multiple single selectors instead!
+      `, elements)
+      return undefined
+    }
+
+    // Generate selector for each cluster
+    const clusterSelectors = []
+    for (const [pattern, clusterElements] of clusters) {
+      const clusterSelector = `${ancestorSelector} ${pattern}`
+      const optimizedSelector = optimize(clusterSelector, clusterElements, options)
+
+      // Validate the selector matches all elements in the cluster
+      const matches = convertNodeList(document.querySelectorAll(optimizedSelector))
+      const allMatch = clusterElements.every((el) => matches.some((m) => m === el))
+
+      if (allMatch) {
+        clusterSelectors.push(optimizedSelector)
+      } else {
+        // Validation failed - fall back to warning
+        if (globalModified) {
+          delete global.document
+        }
+        console.warn(`
+          The selected elements can\'t be efficiently mapped.
+          Its probably best to use multiple single selectors instead!
+        `, elements)
+        return undefined
+      }
+    }
+
+    if (globalModified) {
+      delete global.document
+    }
+
+    // Return comma-separated selectors
+    return clusterSelectors.join(', ')
   }
 
   if (globalModified) {
@@ -88,6 +129,35 @@ export function getMultiSelector (elements, options = {}) {
   }
 
   return selector
+}
+
+/**
+ * Build a selector string from common properties
+ *
+ * @param  {Object} properties - { classes, attributes, tag }
+ * @return {string}            - selector string
+ */
+function buildSelectorFromProperties ({ classes, attributes, tag }) {
+  const selectorPath = []
+
+  if (tag) {
+    selectorPath.push(tag)
+  }
+
+  if (classes && classes.length) {
+    const classSelector = classes.map((name) => `.${name}`).join('')
+    selectorPath.push(classSelector)
+  }
+
+  if (attributes && Object.keys(attributes).length) {
+    const attributeSelector = Object.keys(attributes).reduce((parts, name) => {
+      parts.push(`[${name}="${attributes[name]}"]`)
+      return parts
+    }, []).join('')
+    selectorPath.push(attributeSelector)
+  }
+
+  return selectorPath.join('')
 }
 
 /**
@@ -99,34 +169,50 @@ export function getMultiSelector (elements, options = {}) {
  */
 function getCommonSelectors (elements, options = {}) {
 
-  const { classes, attributes, tag } = getCommonProperties(elements, options)
+  const properties = getCommonProperties(elements, options)
 
-  const selectorPath = []
-
-  if (tag) {
-    selectorPath.push(tag)
-  }
-
-  if (classes) {
-    const classSelector = classes.map((name) => `.${name}`).join('')
-    selectorPath.push(classSelector)
-  }
-
-  if (attributes) {
-    const attributeSelector = Object.keys(attributes).reduce((parts, name) => {
-      parts.push(`[${name}="${attributes[name]}"]`)
-      return parts
-    }, []).join('')
-    selectorPath.push(attributeSelector)
-  }
-
-  if (selectorPath.length) {
+  if (properties.classes || properties.attributes || properties.tag) {
     // TODO: check for parent-child relation
   }
 
   return [
-    selectorPath.join('')
+    buildSelectorFromProperties(properties)
   ]
+}
+
+
+/**
+ * Get selector pattern for a single element
+ *
+ * @param  {HTMLElement} element - [description]
+ * @param  {Object}      options - [description]
+ * @return {string}              - selector pattern
+ */
+function getElementSelectorPattern (element, options = {}) {
+  const properties = getCommonProperties([element], options)
+  return buildSelectorFromProperties(properties)
+}
+
+/**
+ * Cluster elements by their selector pattern
+ *
+ * @param  {Array.<HTMLElement>} elements - [description]
+ * @param  {Object}              options  - [description]
+ * @return {Map}                          - Map of pattern -> elements
+ */
+function clusterElementsBySelector (elements, options = {}) {
+  const clusters = new Map()
+
+  elements.forEach((element) => {
+    const pattern = getElementSelectorPattern(element, options)
+
+    if (!clusters.has(pattern)) {
+      clusters.set(pattern, [])
+    }
+    clusters.get(pattern).push(element)
+  })
+
+  return clusters
 }
 
 /**

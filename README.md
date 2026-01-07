@@ -138,4 +138,31 @@ In contrast to the browser does server environments not have a global context wh
 
 ## Development
 
-To build your own version run `npm run dev` for development (incl. watch) or `npm run build` for production (minified).
+### Requirements
+
+- Node.js 18+
+
+### Setup
+
+```bash
+npm install
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+This generates:
+- `dist/optimal-select.js` - Development build (unminified)
+- `dist/optimal-select.min.js` - Production build (minified)
+- `dist/optimal-select.min.js.map` - Source map
+
+### Build System
+
+- **Webpack 5** - Module bundler
+- **Babel** - ES6+ transpilation (`@babel/preset-env`)
+- **Output format** - UMD (Universal Module Definition)
+
+The entry point is `src/index.mjs` which exports from the source files in `src/`.
