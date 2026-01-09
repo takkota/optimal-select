@@ -445,12 +445,21 @@ function getCommonAncestor(elements) {
  *
  * @param  {Array.<HTMLElement>} elements - [description]
  * @param  {Object}              options  - [description]
+ * @param  {number}              options.outlierTolerance - Tolerance for outliers (0-1).
+ *                               0 means all elements must have the property (default).
+ *                               0.2 means 20% outliers are ignored (80% threshold).
  * @return {Object}                       - [description]
  */
 function getCommonProperties(elements) {
   var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
   var _options$ignore = options.ignore,
-    ignore = _options$ignore === void 0 ? {} : _options$ignore;
+    ignore = _options$ignore === void 0 ? {} : _options$ignore,
+    _options$outlierToler = options.outlierTolerance,
+    outlierTolerance = _options$outlierToler === void 0 ? 0 : _options$outlierToler;
+
+  // Calculate majority threshold from outlier tolerance
+  var majorityThreshold = 1 - outlierTolerance;
+  var totalElements = elements.length;
 
   // Normalize ignore predicates (same logic as match.js)
   var normalizedIgnore = {};
@@ -479,100 +488,110 @@ function getCommonProperties(elements) {
     if (!predicate) return false;
     return predicate(name, value);
   };
+
+  // Frequency counters
+  var classCounter = {}; // className -> count
+  var attributeCounter = {}; // "name=value" -> { name, value, count }
+  var tagCounter = {}; // tagName -> count
+
+  // Count frequencies for all elements
+  elements.forEach(function (element) {
+    // ~ classes
+    var classAttr = element.getAttribute('class');
+    if (classAttr) {
+      var classes = classAttr.trim().split(' ').filter(function (className) {
+        return className && !checkIgnore('class', className, className);
+      });
+      classes.forEach(function (className) {
+        classCounter[className] = (classCounter[className] || 0) + 1;
+      });
+    }
+
+    // ~ attributes
+    var elementAttributes = element.attributes;
+    Object.keys(elementAttributes).forEach(function (key) {
+      var attribute = elementAttributes[key];
+      var attributeName = attribute.name;
+      var attributeValue = attribute.value;
+      // NOTE: workaround detection for non-standard phantomjs NamedNodeMap behaviour
+      // (issue: https://github.com/ariya/phantomjs/issues/14634)
+      if (attribute && attributeName !== 'class') {
+        // Filter out ignored attributes
+        if (!checkIgnore(attributeName, attributeName, attributeValue) && !checkIgnore('attribute', attributeName, attributeValue)) {
+          var _key = "".concat(attributeName, "=").concat(attributeValue);
+          if (!attributeCounter[_key]) {
+            attributeCounter[_key] = {
+              name: attributeName,
+              value: attributeValue,
+              count: 0
+            };
+          }
+          attributeCounter[_key].count++;
+        }
+      }
+    });
+
+    // ~ tag
+    var tag = element.tagName.toLowerCase();
+    if (!checkIgnore('tag', null, tag)) {
+      tagCounter[tag] = (tagCounter[tag] || 0) + 1;
+    }
+  });
+
+  // Build common properties based on majority threshold
   var commonProperties = {
     classes: [],
     attributes: {},
     tag: null
   };
-  elements.forEach(function (element) {
-    var commonClasses = commonProperties.classes,
-      commonAttributes = commonProperties.attributes,
-      commonTag = commonProperties.tag;
 
-    // ~ classes
-    if (commonClasses !== undefined) {
-      var classes = element.getAttribute('class');
-      if (classes) {
-        classes = classes.trim().split(' ').filter(function (className) {
-          // Filter out ignored classes
-          return !checkIgnore('class', className, className);
-        });
-        if (!classes.length) {
-          delete commonProperties.classes;
-        } else if (!commonClasses.length) {
-          commonProperties.classes = classes;
-        } else {
-          commonClasses = commonClasses.filter(function (entry) {
-            return classes.some(function (name) {
-              return name === entry;
-            });
-          });
-          if (commonClasses.length) {
-            commonProperties.classes = commonClasses;
-          } else {
-            delete commonProperties.classes;
-          }
-        }
-      } else {
-        // TODO: restructure removal as 2x set / 2x delete, instead of modify always replacing with new collection
-        delete commonProperties.classes;
-      }
-    }
+  // Filter classes by threshold
+  var majorityClasses = Object.keys(classCounter).filter(function (className) {
+    return classCounter[className] / totalElements >= majorityThreshold;
+  });
+  if (majorityClasses.length) {
+    commonProperties.classes = majorityClasses;
+  } else {
+    delete commonProperties.classes;
+  }
 
-    // ~ attributes
-    if (commonAttributes !== undefined) {
-      var elementAttributes = element.attributes;
-      var attributes = Object.keys(elementAttributes).reduce(function (attributes, key) {
-        var attribute = elementAttributes[key];
-        var attributeName = attribute.name;
-        var attributeValue = attribute.value;
-        // NOTE: workaround detection for non-standard phantomjs NamedNodeMap behaviour
-        // (issue: https://github.com/ariya/phantomjs/issues/14634)
-        if (attribute && attributeName !== 'class') {
-          // Filter out ignored attributes
-          if (!checkIgnore(attributeName, attributeName, attributeValue) && !checkIgnore('attribute', attributeName, attributeValue)) {
-            attributes[attributeName] = attributeValue;
-          }
-        }
-        return attributes;
-      }, {});
-      var attributesNames = Object.keys(attributes);
-      var commonAttributesNames = Object.keys(commonAttributes);
-      if (attributesNames.length) {
-        if (!commonAttributesNames.length) {
-          commonProperties.attributes = attributes;
-        } else {
-          commonAttributes = commonAttributesNames.reduce(function (nextCommonAttributes, name) {
-            var value = commonAttributes[name];
-            if (value === attributes[name]) {
-              nextCommonAttributes[name] = value;
-            }
-            return nextCommonAttributes;
-          }, {});
-          if (Object.keys(commonAttributes).length) {
-            commonProperties.attributes = commonAttributes;
-          } else {
-            delete commonProperties.attributes;
-          }
-        }
-      } else {
-        delete commonProperties.attributes;
-      }
-    }
-
-    // ~ tag
-    if (commonTag !== undefined) {
-      var tag = element.tagName.toLowerCase();
-      // Filter out ignored tags
-      if (checkIgnore('tag', null, tag)) {
-        delete commonProperties.tag;
-      } else if (!commonTag) {
-        commonProperties.tag = tag;
-      } else if (tag !== commonTag) {
-        delete commonProperties.tag;
+  // Filter attributes by threshold (keep only the most frequent value per attribute name)
+  var majorityAttributes = {};
+  var attributeMaxCount = {}; // Track max count per attribute name
+  Object.keys(attributeCounter).forEach(function (key) {
+    var _attributeCounter$key = attributeCounter[key],
+      name = _attributeCounter$key.name,
+      value = _attributeCounter$key.value,
+      count = _attributeCounter$key.count;
+    if (count / totalElements >= majorityThreshold) {
+      // Only keep the most frequent value for each attribute name
+      if (!attributeMaxCount[name] || count > attributeMaxCount[name]) {
+        majorityAttributes[name] = value;
+        attributeMaxCount[name] = count;
       }
     }
   });
+  if (Object.keys(majorityAttributes).length) {
+    commonProperties.attributes = majorityAttributes;
+  } else {
+    delete commonProperties.attributes;
+  }
+
+  // Find majority tag (most frequent tag that meets threshold)
+  var majorityTag = null;
+  var maxTagCount = 0;
+  Object.keys(tagCounter).forEach(function (tag) {
+    var count = tagCounter[tag];
+    if (count / totalElements >= majorityThreshold && count > maxTagCount) {
+      majorityTag = tag;
+      maxTagCount = count;
+    }
+  });
+  if (majorityTag) {
+    commonProperties.tag = majorityTag;
+  } else {
+    delete commonProperties.tag;
+  }
   return commonProperties;
 }
 
@@ -1085,13 +1104,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _optimize__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./optimize */ "./src/optimize.js");
 /* harmony import */ var _utilities__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./utilities */ "./src/utilities.js");
 /* harmony import */ var _common__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./common */ "./src/common.js");
-function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
-function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
-function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
-function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
-function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
-function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 /**
  * # Select
@@ -1142,6 +1154,9 @@ function getSingleSelector(element) {
  *
  * @param  {Array.<HTMLElement>|NodeList} elements - [description]
  * @param  {Object}                       options  - [description]
+ * @param  {number}                       options.outlierTolerance - Tolerance for outliers (0-1).
+ *                                        0 means all elements must match (default).
+ *                                        0.2 means 20% outliers are tolerated (80% must match).
  * @return {string}                                - [description]
  */
 function getMultiSelector(elements) {
@@ -1154,6 +1169,9 @@ function getMultiSelector(elements) {
   })) {
     throw new Error("Invalid input - only an Array of HTMLElements or representations of them is supported!");
   }
+  var _options$outlierToler = options.outlierTolerance,
+    outlierTolerance = _options$outlierToler === void 0 ? 0 : _options$outlierToler;
+  var majorityThreshold = 1 - outlierTolerance;
   var globalModified = (0,_adapt__WEBPACK_IMPORTED_MODULE_0__["default"])(elements[0], options);
   var ancestor = (0,_common__WEBPACK_IMPORTED_MODULE_4__.getCommonAncestor)(elements, options);
   var ancestorSelector = getSingleSelector(ancestor, options);
@@ -1163,71 +1181,20 @@ function getMultiSelector(elements) {
   var descendantSelector = commonSelectors[0];
   var selector = (0,_optimize__WEBPACK_IMPORTED_MODULE_2__["default"])("".concat(ancestorSelector, " ").concat(descendantSelector), elements, options);
   var selectorMatches = (0,_utilities__WEBPACK_IMPORTED_MODULE_3__.convertNodeList)(document.querySelectorAll(selector));
-  if (!elements.every(function (element) {
+
+  // Calculate match ratio and validate against threshold
+  var matchCount = elements.filter(function (element) {
     return selectorMatches.some(function (entry) {
       return entry === element;
     });
-  })) {
-    // Cluster elements by selector pattern and try to generate combined selector
-    var clusters = clusterElementsBySelector(elements, options);
-
-    // If only one cluster, cannot improve - fall back to warning
-    if (clusters.size <= 1) {
-      if (globalModified) {
-        delete __webpack_require__.g.document;
-      }
-      console.warn("\n        The selected elements can't be efficiently mapped.\n        Its probably best to use multiple single selectors instead!\n      ", elements);
-      return undefined;
-    }
-
-    // Generate selector for each cluster
-    var clusterSelectors = [];
-    var _iterator = _createForOfIteratorHelper(clusters),
-      _step;
-    try {
-      var _loop = function _loop() {
-          var _step$value = _slicedToArray(_step.value, 2),
-            pattern = _step$value[0],
-            clusterElements = _step$value[1];
-          var clusterSelector = "".concat(ancestorSelector, " ").concat(pattern);
-          var optimizedSelector = (0,_optimize__WEBPACK_IMPORTED_MODULE_2__["default"])(clusterSelector, clusterElements, options);
-
-          // Validate the selector matches all elements in the cluster
-          var matches = (0,_utilities__WEBPACK_IMPORTED_MODULE_3__.convertNodeList)(document.querySelectorAll(optimizedSelector));
-          var allMatch = clusterElements.every(function (el) {
-            return matches.some(function (m) {
-              return m === el;
-            });
-          });
-          if (allMatch) {
-            clusterSelectors.push(optimizedSelector);
-          } else {
-            // Validation failed - fall back to warning
-            if (globalModified) {
-              delete __webpack_require__.g.document;
-            }
-            console.warn("\n          The selected elements can't be efficiently mapped.\n          Its probably best to use multiple single selectors instead!\n        ", elements);
-            return {
-              v: undefined
-            };
-          }
-        },
-        _ret;
-      for (_iterator.s(); !(_step = _iterator.n()).done;) {
-        _ret = _loop();
-        if (_ret) return _ret.v;
-      }
-    } catch (err) {
-      _iterator.e(err);
-    } finally {
-      _iterator.f();
-    }
+  }).length;
+  var matchRatio = matchCount / elements.length;
+  if (matchRatio < majorityThreshold) {
     if (globalModified) {
       delete __webpack_require__.g.document;
     }
-
-    // Return comma-separated selectors
-    return clusterSelectors.join(', ');
+    console.warn("\n      The selected elements can't be efficiently mapped.\n      Its probably best to use multiple single selectors instead!\n    ", elements);
+    return undefined;
   }
   if (globalModified) {
     delete __webpack_require__.g.document;
@@ -1279,39 +1246,6 @@ function getCommonSelectors(elements) {
     // TODO: check for parent-child relation
   }
   return [buildSelectorFromProperties(properties)];
-}
-
-/**
- * Get selector pattern for a single element
- *
- * @param  {HTMLElement} element - [description]
- * @param  {Object}      options - [description]
- * @return {string}              - selector pattern
- */
-function getElementSelectorPattern(element) {
-  var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-  var properties = (0,_common__WEBPACK_IMPORTED_MODULE_4__.getCommonProperties)([element], options);
-  return buildSelectorFromProperties(properties);
-}
-
-/**
- * Cluster elements by their selector pattern
- *
- * @param  {Array.<HTMLElement>} elements - [description]
- * @param  {Object}              options  - [description]
- * @return {Map}                          - Map of pattern -> elements
- */
-function clusterElementsBySelector(elements) {
-  var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-  var clusters = new Map();
-  elements.forEach(function (element) {
-    var pattern = getElementSelectorPattern(element, options);
-    if (!clusters.has(pattern)) {
-      clusters.set(pattern, []);
-    }
-    clusters.get(pattern).push(element);
-  });
-  return clusters;
 }
 
 /**
