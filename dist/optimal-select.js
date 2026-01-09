@@ -555,15 +555,20 @@ function getCommonProperties(elements) {
     delete commonProperties.classes;
   }
 
-  // Filter attributes by threshold
+  // Filter attributes by threshold (keep only the most frequent value per attribute name)
   var majorityAttributes = {};
+  var attributeMaxCount = {}; // Track max count per attribute name
   Object.keys(attributeCounter).forEach(function (key) {
     var _attributeCounter$key = attributeCounter[key],
       name = _attributeCounter$key.name,
       value = _attributeCounter$key.value,
       count = _attributeCounter$key.count;
     if (count / totalElements >= majorityThreshold) {
-      majorityAttributes[name] = value;
+      // Only keep the most frequent value for each attribute name
+      if (!attributeMaxCount[name] || count > attributeMaxCount[name]) {
+        majorityAttributes[name] = value;
+        attributeMaxCount[name] = count;
+      }
     }
   });
   if (Object.keys(majorityAttributes).length) {

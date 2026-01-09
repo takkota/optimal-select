@@ -163,12 +163,17 @@ export function getCommonProperties (elements, options = {}) {
     delete commonProperties.classes
   }
 
-  // Filter attributes by threshold
+  // Filter attributes by threshold (keep only the most frequent value per attribute name)
   const majorityAttributes = {}
+  const attributeMaxCount = {}  // Track max count per attribute name
   Object.keys(attributeCounter).forEach((key) => {
     const { name, value, count } = attributeCounter[key]
     if (count / totalElements >= majorityThreshold) {
-      majorityAttributes[name] = value
+      // Only keep the most frequent value for each attribute name
+      if (!attributeMaxCount[name] || count > attributeMaxCount[name]) {
+        majorityAttributes[name] = value
+        attributeMaxCount[name] = count
+      }
     }
   })
   if (Object.keys(majorityAttributes).length) {
