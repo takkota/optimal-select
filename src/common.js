@@ -57,13 +57,21 @@ export function getCommonAncestor (elements, options = {}) {
  *
  * @param  {Array.<HTMLElement>} elements - [description]
  * @param  {Object}              options  - [description]
+ * @param  {number}              options.outlierTolerance - Tolerance for outliers (0-1).
+ *                               0 means all elements must have the property (default).
+ *                               0.2 means 20% outliers are ignored (80% threshold).
  * @return {Object}                       - [description]
  */
 export function getCommonProperties (elements, options = {}) {
 
   const {
-    ignore = {}
+    ignore = {},
+    outlierTolerance = 0
   } = options
+
+  // Calculate majority threshold from outlier tolerance
+  const majorityThreshold = 1 - outlierTolerance
+  const totalElements = elements.length
 
   // Normalize ignore predicates (same logic as match.js)
   const normalizedIgnore = {}
@@ -92,103 +100,98 @@ export function getCommonProperties (elements, options = {}) {
     return predicate(name, value)
   }
 
+  // Frequency counters
+  const classCounter = {}      // className -> count
+  const attributeCounter = {}  // "name=value" -> { name, value, count }
+  const tagCounter = {}        // tagName -> count
+
+  // Count frequencies for all elements
+  elements.forEach((element) => {
+    // ~ classes
+    const classAttr = element.getAttribute('class')
+    if (classAttr) {
+      const classes = classAttr.trim().split(' ').filter((className) => {
+        return className && !checkIgnore('class', className, className)
+      })
+      classes.forEach((className) => {
+        classCounter[className] = (classCounter[className] || 0) + 1
+      })
+    }
+
+    // ~ attributes
+    const elementAttributes = element.attributes
+    Object.keys(elementAttributes).forEach((key) => {
+      const attribute = elementAttributes[key]
+      const attributeName = attribute.name
+      const attributeValue = attribute.value
+      // NOTE: workaround detection for non-standard phantomjs NamedNodeMap behaviour
+      // (issue: https://github.com/ariya/phantomjs/issues/14634)
+      if (attribute && attributeName !== 'class') {
+        // Filter out ignored attributes
+        if (!checkIgnore(attributeName, attributeName, attributeValue) &&
+            !checkIgnore('attribute', attributeName, attributeValue)) {
+          const key = `${attributeName}=${attributeValue}`
+          if (!attributeCounter[key]) {
+            attributeCounter[key] = { name: attributeName, value: attributeValue, count: 0 }
+          }
+          attributeCounter[key].count++
+        }
+      }
+    })
+
+    // ~ tag
+    const tag = element.tagName.toLowerCase()
+    if (!checkIgnore('tag', null, tag)) {
+      tagCounter[tag] = (tagCounter[tag] || 0) + 1
+    }
+  })
+
+  // Build common properties based on majority threshold
   const commonProperties = {
     classes: [],
     attributes: {},
     tag: null
   }
 
-  elements.forEach((element) => {
+  // Filter classes by threshold
+  const majorityClasses = Object.keys(classCounter).filter((className) => {
+    return classCounter[className] / totalElements >= majorityThreshold
+  })
+  if (majorityClasses.length) {
+    commonProperties.classes = majorityClasses
+  } else {
+    delete commonProperties.classes
+  }
 
-    var {
-      classes: commonClasses,
-      attributes: commonAttributes,
-      tag: commonTag
-    } = commonProperties
-
-    // ~ classes
-    if (commonClasses !== undefined) {
-      var classes = element.getAttribute('class')
-      if (classes) {
-        classes = classes.trim().split(' ').filter((className) => {
-          // Filter out ignored classes
-          return !checkIgnore('class', className, className)
-        })
-        if (!classes.length) {
-          delete commonProperties.classes
-        } else if (!commonClasses.length) {
-          commonProperties.classes = classes
-        } else {
-          commonClasses = commonClasses.filter((entry) => classes.some((name) => name === entry))
-          if (commonClasses.length) {
-            commonProperties.classes = commonClasses
-          } else {
-            delete commonProperties.classes
-          }
-        }
-      } else {
-        // TODO: restructure removal as 2x set / 2x delete, instead of modify always replacing with new collection
-        delete commonProperties.classes
-      }
-    }
-
-    // ~ attributes
-    if (commonAttributes !== undefined) {
-      const elementAttributes = element.attributes
-      const attributes = Object.keys(elementAttributes).reduce((attributes, key) => {
-        const attribute = elementAttributes[key]
-        const attributeName = attribute.name
-        const attributeValue = attribute.value
-        // NOTE: workaround detection for non-standard phantomjs NamedNodeMap behaviour
-        // (issue: https://github.com/ariya/phantomjs/issues/14634)
-        if (attribute && attributeName !== 'class') {
-          // Filter out ignored attributes
-          if (!checkIgnore(attributeName, attributeName, attributeValue) &&
-              !checkIgnore('attribute', attributeName, attributeValue)) {
-            attributes[attributeName] = attributeValue
-          }
-        }
-        return attributes
-      }, {})
-
-      const attributesNames = Object.keys(attributes)
-      const commonAttributesNames = Object.keys(commonAttributes)
-
-      if (attributesNames.length) {
-        if (!commonAttributesNames.length) {
-          commonProperties.attributes = attributes
-        } else {
-          commonAttributes = commonAttributesNames.reduce((nextCommonAttributes, name) => {
-            const value = commonAttributes[name]
-            if (value === attributes[name]) {
-              nextCommonAttributes[name] = value
-            }
-            return nextCommonAttributes
-          }, {})
-          if (Object.keys(commonAttributes).length) {
-            commonProperties.attributes = commonAttributes
-          } else {
-            delete commonProperties.attributes
-          }
-        }
-      } else {
-        delete commonProperties.attributes
-      }
-    }
-
-    // ~ tag
-    if (commonTag !== undefined) {
-      const tag = element.tagName.toLowerCase()
-      // Filter out ignored tags
-      if (checkIgnore('tag', null, tag)) {
-        delete commonProperties.tag
-      } else if (!commonTag) {
-        commonProperties.tag = tag
-      } else if (tag !== commonTag) {
-        delete commonProperties.tag
-      }
+  // Filter attributes by threshold
+  const majorityAttributes = {}
+  Object.keys(attributeCounter).forEach((key) => {
+    const { name, value, count } = attributeCounter[key]
+    if (count / totalElements >= majorityThreshold) {
+      majorityAttributes[name] = value
     }
   })
+  if (Object.keys(majorityAttributes).length) {
+    commonProperties.attributes = majorityAttributes
+  } else {
+    delete commonProperties.attributes
+  }
+
+  // Find majority tag (most frequent tag that meets threshold)
+  let majorityTag = null
+  let maxTagCount = 0
+  Object.keys(tagCounter).forEach((tag) => {
+    const count = tagCounter[tag]
+    if (count / totalElements >= majorityThreshold && count > maxTagCount) {
+      majorityTag = tag
+      maxTagCount = count
+    }
+  })
+  if (majorityTag) {
+    commonProperties.tag = majorityTag
+  } else {
+    delete commonProperties.tag
+  }
 
   return commonProperties
 }

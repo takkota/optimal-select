@@ -51,6 +51,9 @@ export function getSingleSelector (element, options = {}) {
  *
  * @param  {Array.<HTMLElement>|NodeList} elements - [description]
  * @param  {Object}                       options  - [description]
+ * @param  {number}                       options.outlierTolerance - Tolerance for outliers (0-1).
+ *                                        0 means all elements must match (default).
+ *                                        0.2 means 20% outliers are tolerated (80% must match).
  * @return {string}                                - [description]
  */
 export function getMultiSelector (elements, options = {}) {
@@ -62,6 +65,9 @@ export function getMultiSelector (elements, options = {}) {
   if (elements.some((element) => element.nodeType !== 1)) {
     throw new Error(`Invalid input - only an Array of HTMLElements or representations of them is supported!`)
   }
+
+  const { outlierTolerance = 0 } = options
+  const majorityThreshold = 1 - outlierTolerance
 
   const globalModified = adapt(elements[0], options)
 
@@ -75,53 +81,21 @@ export function getMultiSelector (elements, options = {}) {
   const selector = optimize(`${ancestorSelector} ${descendantSelector}`, elements, options)
   const selectorMatches = convertNodeList(document.querySelectorAll(selector))
 
-  if (!elements.every((element) => selectorMatches.some((entry) => entry === element) )) {
-    // Cluster elements by selector pattern and try to generate combined selector
-    const clusters = clusterElementsBySelector(elements, options)
+  // Calculate match ratio and validate against threshold
+  const matchCount = elements.filter((element) =>
+    selectorMatches.some((entry) => entry === element)
+  ).length
+  const matchRatio = matchCount / elements.length
 
-    // If only one cluster, cannot improve - fall back to warning
-    if (clusters.size <= 1) {
-      if (globalModified) {
-        delete global.document
-      }
-      console.warn(`
-        The selected elements can\'t be efficiently mapped.
-        Its probably best to use multiple single selectors instead!
-      `, elements)
-      return undefined
-    }
-
-    // Generate selector for each cluster
-    const clusterSelectors = []
-    for (const [pattern, clusterElements] of clusters) {
-      const clusterSelector = `${ancestorSelector} ${pattern}`
-      const optimizedSelector = optimize(clusterSelector, clusterElements, options)
-
-      // Validate the selector matches all elements in the cluster
-      const matches = convertNodeList(document.querySelectorAll(optimizedSelector))
-      const allMatch = clusterElements.every((el) => matches.some((m) => m === el))
-
-      if (allMatch) {
-        clusterSelectors.push(optimizedSelector)
-      } else {
-        // Validation failed - fall back to warning
-        if (globalModified) {
-          delete global.document
-        }
-        console.warn(`
-          The selected elements can\'t be efficiently mapped.
-          Its probably best to use multiple single selectors instead!
-        `, elements)
-        return undefined
-      }
-    }
-
+  if (matchRatio < majorityThreshold) {
     if (globalModified) {
       delete global.document
     }
-
-    // Return comma-separated selectors
-    return clusterSelectors.join(', ')
+    console.warn(`
+      The selected elements can\'t be efficiently mapped.
+      Its probably best to use multiple single selectors instead!
+    `, elements)
+    return undefined
   }
 
   if (globalModified) {
@@ -180,40 +154,6 @@ function getCommonSelectors (elements, options = {}) {
   ]
 }
 
-
-/**
- * Get selector pattern for a single element
- *
- * @param  {HTMLElement} element - [description]
- * @param  {Object}      options - [description]
- * @return {string}              - selector pattern
- */
-function getElementSelectorPattern (element, options = {}) {
-  const properties = getCommonProperties([element], options)
-  return buildSelectorFromProperties(properties)
-}
-
-/**
- * Cluster elements by their selector pattern
- *
- * @param  {Array.<HTMLElement>} elements - [description]
- * @param  {Object}              options  - [description]
- * @return {Map}                          - Map of pattern -> elements
- */
-function clusterElementsBySelector (elements, options = {}) {
-  const clusters = new Map()
-
-  elements.forEach((element) => {
-    const pattern = getElementSelectorPattern(element, options)
-
-    if (!clusters.has(pattern)) {
-      clusters.set(pattern, [])
-    }
-    clusters.get(pattern).push(element)
-  })
-
-  return clusters
-}
 
 /**
  * Choose action depending on the input (multiple/single)
