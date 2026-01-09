@@ -101,6 +101,34 @@ Element is a DOM ode
 Retrieve a unique CSS selector of the elements
 Elements is an array with a list of DOM nodes
 
+#### outlierTolerance Option
+
+When working with elements that may include some outliers (e.g., elements selected by LLM with probabilistic errors), you can use the `outlierTolerance` option to ignore a certain percentage of elements that don't share common properties.
+
+```js
+// Using ES modules / bundler
+import { getMultiSelector } from 'optimal-select'
+
+// Using script tag (browser global)
+// const { getMultiSelector } = OptimalSelect
+
+// Example: 5 elements where 4 have .TourTitle class, 1 doesn't
+const selector = getMultiSelector(elements, {
+  outlierTolerance: 0.2  // Ignore up to 20% outliers
+})
+// → Returns selector with .TourTitle (ignoring the 1 outlier element)
+```
+
+| Value | Meaning |
+|-------|---------|
+| `0` (default) | All elements must share the property (strict mode) |
+| `0.2` | Ignore up to 20% outliers (80%+ elements must share the property) |
+| `0.4` | Ignore up to 40% outliers (60%+ elements must share the property) |
+
+This option affects both:
+1. **Common property extraction**: Properties present in `(1 - outlierTolerance)` ratio of elements are considered "common"
+2. **Selector validation**: Generated selector must match at least `(1 - outlierTolerance)` ratio of input elements
+
 ```js
   optimize(selector, elements, [options])
 ```
