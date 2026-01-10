@@ -31,9 +31,58 @@ import { select } from 'optimal-select' // global: 'OptimalSelect'
 
 document.addEventListener('click', (e) => {
   var selector = select(e.target)
-  console.log(selector)  
+  console.log(selector)
 })
 ```
+
+
+### Browser Usage (Script Tag / DevTools)
+
+For use in browsers via script tag or DevTools console injection, load the pre-built UMD bundle:
+
+```html
+<script src="path/to/optimal-select.min.js"></script>
+<script>
+  // All APIs are available under OptimalSelect namespace
+  const button = document.querySelector('button');
+  const selector = OptimalSelect.select(button);
+  console.log(selector);
+</script>
+```
+
+#### Available APIs in Browser
+
+| API | Description |
+|-----|-------------|
+| `OptimalSelect.select(element, [options])` | Generate unique selector for single element |
+| `OptimalSelect.getSingleSelector(element, [options])` | Alias for select |
+| `OptimalSelect.getMultiSelector(elements, [options])` | Generate common selector for multiple elements |
+| `OptimalSelect.optimize(selector, element, [options])` | Optimize an existing selector |
+| `OptimalSelect.common.getCommonAncestor(elements)` | Find common ancestor element |
+| `OptimalSelect.common.getCommonProperties(elements)` | Extract common properties |
+
+#### DevTools Console Injection
+
+To use in browser DevTools on any website:
+
+```javascript
+// 1. Load the script dynamically
+const script = document.createElement('script');
+script.src = 'https://your-server.com/optimal-select.min.js';
+document.head.appendChild(script);
+
+// 2. After script loads, use the APIs
+const element = document.querySelector('.target-element');
+const selector = OptimalSelect.select(element);
+console.log(selector);
+
+// Generate common selector for multiple elements
+const items = document.querySelectorAll('.list-item');
+const commonSelector = OptimalSelect.getMultiSelector(Array.from(items));
+console.log(commonSelector);
+```
+
+Or copy-paste the contents of `dist/optimal-select.min.js` directly into DevTools console.
 
 
 ### Configuration
