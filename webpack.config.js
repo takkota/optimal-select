@@ -6,8 +6,7 @@ const baseConfig = {
     path: path.resolve(__dirname, 'dist'),
     library: {
       name: 'OptimalSelect',
-      type: 'umd',
-      export: 'default'
+      type: 'umd'
     },
     globalObject: 'this'
   },
