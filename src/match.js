@@ -4,7 +4,7 @@
  * Retrieve selector for a node.
  */
 
-import { escapeValue } from './utilities'
+import { escapeValue, cssEscapeIdentifier } from './utilities'
 
 const defaultIgnore = {
   attribute (attributeName) {
@@ -162,14 +162,15 @@ function findAttributesPattern (priority, element, ignore) {
 
     var pattern = `[${attributeName}="${attributeValue}"]`
 
-    if ((/\b\d/).test(attributeValue) === false) {
-      if (attributeName === 'id') {
-        pattern = `#${attributeValue}`
-      }
+    if (attributeName === 'id') {
+      pattern = `#${cssEscapeIdentifier(attribute.value)}`
+    }
 
-      if (attributeName === 'class') {
-        const className = attributeValue.trim().replace(/\s+/g, '.')
-        pattern = `.${className}`
+    if (attributeName === 'class') {
+      const classes = attribute.value.trim().split(/\s+/)
+        .filter(c => c && !checkIgnore(currentIgnore, attributeName, c, currentDefaultIgnore))
+      if (classes.length > 0) {
+        pattern = classes.map(c => `.${cssEscapeIdentifier(c)}`).join('')
       }
     }
 

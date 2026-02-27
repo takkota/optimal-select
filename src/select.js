@@ -8,7 +8,7 @@
 import adapt from './adapt'
 import match from './match'
 import optimize from './optimize'
-import { convertNodeList } from './utilities'
+import { convertNodeList, cssEscapeIdentifier, escapeValue } from './utilities'
 import { getCommonAncestor, getCommonProperties } from './common'
 
 /**
@@ -119,13 +119,13 @@ function buildSelectorFromProperties ({ classes, attributes, tag }) {
   }
 
   if (classes && classes.length) {
-    const classSelector = classes.map((name) => `.${name}`).join('')
+    const classSelector = classes.map((name) => `.${cssEscapeIdentifier(name)}`).join('')
     selectorPath.push(classSelector)
   }
 
   if (attributes && Object.keys(attributes).length) {
     const attributeSelector = Object.keys(attributes).reduce((parts, name) => {
-      parts.push(`[${name}="${attributes[name]}"]`)
+      parts.push(`[${name}="${escapeValue(attributes[name])}"]`)
       return parts
     }, []).join('')
     selectorPath.push(attributeSelector)
