@@ -751,27 +751,40 @@ function findAttributesPattern(priority, element, ignore) {
     }
     return currPos - nextPos;
   });
-  for (var i = 0, l = sortedKeys.length; i < l; i++) {
-    var key = sortedKeys[i];
-    var attribute = attributes[key];
-    var attributeName = attribute.name;
-    var attributeValue = (0,_utilities__WEBPACK_IMPORTED_MODULE_0__.escapeValue)(attribute.value);
-    var currentIgnore = ignore[attributeName] || ignore.attribute;
-    var currentDefaultIgnore = defaultIgnore[attributeName] || defaultIgnore.attribute;
-    if (checkIgnore(currentIgnore, attributeName, attributeValue, currentDefaultIgnore)) {
-      continue;
-    }
-    var pattern = "[".concat(attributeName, "=\"").concat(attributeValue, "\"]");
-    if (/\b\d/.test(attributeValue) === false) {
+  var _loop = function _loop() {
+      var key = sortedKeys[i];
+      var attribute = attributes[key];
+      var attributeName = attribute.name;
+      var attributeValue = (0,_utilities__WEBPACK_IMPORTED_MODULE_0__.escapeValue)(attribute.value);
+      var currentIgnore = ignore[attributeName] || ignore.attribute;
+      var currentDefaultIgnore = defaultIgnore[attributeName] || defaultIgnore.attribute;
+      if (checkIgnore(currentIgnore, attributeName, attributeValue, currentDefaultIgnore)) {
+        return 0; // continue
+      }
+      pattern = "[".concat(attributeName, "=\"").concat(attributeValue, "\"]");
       if (attributeName === 'id') {
-        pattern = "#".concat(attributeValue);
+        pattern = "#".concat((0,_utilities__WEBPACK_IMPORTED_MODULE_0__.cssEscapeIdentifier)(attribute.value));
       }
       if (attributeName === 'class') {
-        var className = attributeValue.trim().replace(/\s+/g, '.');
-        pattern = ".".concat(className);
+        var classes = attribute.value.trim().split(/\s+/).filter(function (c) {
+          return c && !checkIgnore(currentIgnore, attributeName, c, currentDefaultIgnore);
+        });
+        if (classes.length > 0) {
+          pattern = classes.map(function (c) {
+            return ".".concat((0,_utilities__WEBPACK_IMPORTED_MODULE_0__.cssEscapeIdentifier)(c));
+          }).join('');
+        }
       }
-    }
-    return pattern;
+      return {
+        v: pattern
+      };
+    },
+    pattern,
+    _ret;
+  for (var i = 0, l = sortedKeys.length; i < l; i++) {
+    _ret = _loop();
+    if (_ret === 0) continue;
+    if (_ret) return _ret.v;
   }
   return null;
 }
@@ -1218,13 +1231,13 @@ function buildSelectorFromProperties(_ref) {
   }
   if (classes && classes.length) {
     var classSelector = classes.map(function (name) {
-      return ".".concat(name);
+      return ".".concat((0,_utilities__WEBPACK_IMPORTED_MODULE_3__.cssEscapeIdentifier)(name));
     }).join('');
     selectorPath.push(classSelector);
   }
   if (attributes && Object.keys(attributes).length) {
     var attributeSelector = Object.keys(attributes).reduce(function (parts, name) {
-      parts.push("[".concat(name, "=\"").concat(attributes[name], "\"]"));
+      parts.push("[".concat(name, "=\"").concat((0,_utilities__WEBPACK_IMPORTED_MODULE_3__.escapeValue)(attributes[name]), "\"]"));
       return parts;
     }, []).join('');
     selectorPath.push(attributeSelector);
@@ -1276,6 +1289,7 @@ function getQuerySelector(input) {
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   convertNodeList: () => (/* binding */ convertNodeList),
+/* harmony export */   cssEscapeIdentifier: () => (/* binding */ cssEscapeIdentifier),
 /* harmony export */   escapeValue: () => (/* binding */ escapeValue)
 /* harmony export */ });
 /**
@@ -1309,6 +1323,46 @@ function convertNodeList(nodes) {
  */
 function escapeValue(value) {
   return value && value.replace(/['"`\\/:\?&!#$%^()[\]{|}*+;,.<=>@~]/g, '\\$&').replace(/\n/g, '\A');
+}
+
+/**
+ * Escape a value for use as a CSS identifier (class name, ID, etc.)
+ *
+ * Uses CSS.escape() when available (browsers), otherwise applies a polyfill
+ * based on the CSSOM spec: https://drafts.csswg.org/cssom/#serialize-an-identifier
+ *
+ * @param  {String} value - [description]
+ * @return {String}       - [description]
+ */
+function cssEscapeIdentifier(value) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  // Polyfill based on https://github.com/mathiasbynens/CSS.escape
+  var result = '';
+  var length = value.length;
+  for (var i = 0; i < length; i++) {
+    var ch = value.charAt(i);
+    var code = value.charCodeAt(i);
+    if (code === 0) {
+      result += "\uFFFD";
+      continue;
+    }
+    if (code >= 0x0001 && code <= 0x001F || code === 0x007F || i === 0 && code >= 0x0030 && code <= 0x0039 || i === 1 && code >= 0x0030 && code <= 0x0039 && value.charCodeAt(0) === 0x002D) {
+      result += '\\' + code.toString(16) + ' ';
+      continue;
+    }
+    if (i === 0 && code === 0x002D && length === 1) {
+      result += '\\' + ch;
+      continue;
+    }
+    if (code >= 0x0080 || code === 0x002D || code === 0x005F || code >= 0x0030 && code <= 0x0039 || code >= 0x0041 && code <= 0x005A || code >= 0x0061 && code <= 0x007A) {
+      result += ch;
+      continue;
+    }
+    result += '\\' + ch;
+  }
+  return result;
 }
 
 /***/ }
