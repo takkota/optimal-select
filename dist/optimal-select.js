@@ -1339,6 +1339,7 @@ function cssEscapeIdentifier(value) {
     return CSS.escape(value);
   }
   // Polyfill based on https://github.com/mathiasbynens/CSS.escape
+  value = String(value);
   var result = '';
   var length = value.length;
   for (var i = 0; i < length; i++) {
